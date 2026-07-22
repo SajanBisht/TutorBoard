@@ -1,128 +1,72 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
-import { Profile, SessionStatus } from '../../lib/types';
-import { fetchAllSessions, fetchAllUsers, setSessionStatus, deleteSession, SessionWithHost } from '../lobby/sessionApi';
-import { ThemeToggle } from '../../components/ThemeToggle';
+import { supabase } from '../../lib/supabase';
 import { Logo } from '../auth/LoginScreen';
+import { ThemeToggle } from '../../components/ThemeToggle';
+import { Avatar } from '../../components/Avatar';
 import { SessionStatusBadge } from '../../components/StatusBadge';
-import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { Profile, SessionRow } from '../../lib/types';
 
 export function AdminScreen() {
-  const { profile, signOut } = useAuth();
   const navigate = useNavigate();
-  const [sessions, setSessions] = useState<SessionWithHost[]>([]);
+  const { profile, signOut } = useAuth();
+  const [tab, setTab] = useState<'sessions' | 'users'>('sessions');
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'sessions' | 'users'>('sessions');
-  const [endTarget, setEndTarget] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
-    const [{ data: sess, error: sErr }, { data: usrs, error: uErr }] = await Promise.all([fetchAllSessions(), fetchAllUsers()]);
-    if (sErr || uErr) { setError(sErr || uErr || 'Failed to load admin data.'); setLoading(false); return; }
-    setSessions(sess || []); setUsers(usrs || []); setLoading(false);
-  }, []);
+  useEffect(() => {
+    if (profile && profile.role !== 'admin') { navigate('/lobby'); return; }
+    (async () => {
+      const { data: s } = await supabase.from('sessions').select().order('created_at', { ascending: false }).limit(100);
+      setSessions((s || []) as SessionRow[]);
+      const { data: u } = await supabase.from('profiles').select('id, name, username, email, role, created_at').order('created_at', { ascending: false }).limit(100);
+      setUsers((u || []) as Profile[]);
+      setLoading(false);
+    })();
+  }, [profile, navigate]);
 
-  useEffect(() => { load(); }, [load]);
-
-  if (profile?.role !== 'admin') {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 bg-ink-50 dark:bg-ink-800">
-        <p className="text-sm text-danger">Admins only.</p>
-        <button onClick={() => navigate('/lobby')} className="tb-btn-secondary">Back to lobby</button>
-      </div>
-    );
-  }
-
-  const onEnd = async () => { if (!endTarget) return; await setSessionStatus(endTarget, 'ended'); setEndTarget(null); load(); };
-  const onDelete = async () => {
-    if (!deleteTarget) return;
-    const { error } = await deleteSession(deleteTarget);
-    setDeleteTarget(null);
-    if (error) setError(error);
-    load();
-  };
-  const onSetStatus = async (id: string, status: SessionStatus) => { await setSessionStatus(id, status); load(); };
+  if (profile?.role !== 'admin') return null;
 
   return (
     <div className="min-h-full bg-ink-50 dark:bg-ink-800">
-      <header className="sticky top-0 z-10 border-b border-ink-200 bg-ink-50/80 backdrop-blur dark:border-ink-700 dark:bg-ink-800/80">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-2"><Logo /><span className="font-display text-lg font-bold tracking-tight">Admin</span><span className="tb-badge bg-brand-500/10 text-brand-600 dark:text-brand-300">admin</span></div>
+      <header className="sticky top-0 z-20 border-b border-ink-200 bg-white/80 backdrop-blur-md dark:border-ink-700 dark:bg-ink-700/60">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+          <Logo />
           <div className="flex items-center gap-2">
-            <button onClick={() => navigate('/lobby')} className="tb-btn-ghost">Lobby</button>
+            <button onClick={() => navigate('/lobby')} className="tb-btn-ghost">Sessions</button>
             <button onClick={() => navigate('/groups')} className="tb-btn-ghost">Groups</button>
-            <button onClick={() => navigate('/settings')} className="tb-btn-ghost">Settings</button>
+            <button onClick={() => navigate('/settings')} className="tb-btn-ghost"><Avatar name={profile?.name || 'User'} size={28} /></button>
             <ThemeToggle />
-            <button onClick={signOut} className="tb-btn-secondary">Log out</button>
+            <button onClick={signOut} className="tb-btn-secondary text-xs">Sign out</button>
           </div>
         </div>
       </header>
-
       <main className="mx-auto max-w-5xl px-4 py-6">
-        <div className="mb-6">
-          <h1 className="font-display text-2xl font-bold">Admin dashboard</h1>
-          <p className="text-sm text-ink-500 dark:text-ink-300">Manage all sessions and users across TutorBoard.</p>
+        <h1 className="font-display text-2xl font-bold">Admin Dashboard</h1>
+        <div className="mt-4 flex gap-2">
+          <button onClick={() => setTab('sessions')} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === 'sessions' ? 'bg-brand-500 text-white' : 'bg-ink-100 text-ink-600 dark:bg-ink-700 dark:text-ink-200'}`}>Sessions</button>
+          <button onClick={() => setTab('users')} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === 'users' ? 'bg-brand-500 text-white' : 'bg-ink-100 text-ink-600 dark:bg-ink-700 dark:text-ink-200'}`}>Users</button>
         </div>
-
-        <div className="mb-4 flex gap-1 rounded-lg border border-ink-200 bg-white p-1 dark:border-ink-700 dark:bg-ink-700/60">
-          {(['sessions', 'users'] as const).map((t) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition capitalize ${tab === t ? 'bg-brand-500 text-white' : 'text-ink-600 hover:bg-ink-100 dark:text-ink-200 dark:hover:bg-ink-600'}`}>
-              {t} {t === 'sessions' ? `(${sessions.length})` : `(${users.length})`}
-            </button>
-          ))}
-        </div>
-
-        {error && (
-          <div className="tb-card mb-4 flex items-center justify-between p-4">
-            <p className="text-sm text-danger">{error}</p>
-            <button onClick={load} className="tb-btn-secondary">Retry</button>
-          </div>
-        )}
-
         {loading ? (
-          <div className="space-y-2">{[0, 1, 2, 3].map((i) => <div key={i} className="tb-card h-16 animate-pulse bg-ink-100 dark:bg-ink-700/40" />)}</div>
+          <div className="mt-4 flex items-center gap-2 text-sm text-ink-500"><div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" /> Loading…</div>
         ) : tab === 'sessions' ? (
-          <div className="space-y-2">
-            {sessions.length === 0 && <div className="tb-card p-8 text-center text-sm text-ink-500">No sessions.</div>}
-            {sessions.map((s) => (
-              <div key={s.id} className="tb-card p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <button onClick={() => navigate(`/session/${s.id}`)} className="text-left"><p className="font-semibold hover:text-brand-500">{s.title}</p></button>
-                    <p className="mt-1 text-xs text-ink-500 dark:text-ink-300">Host: {s.hostName || '—'} · Code <span className="font-mono font-semibold">{s.join_code}</span> · {s.participantCount || 0} participants</p>
-                  </div>
-                  <SessionStatusBadge status={s.status} />
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button onClick={() => navigate(`/session/${s.id}`)} className="tb-btn-secondary text-xs">View</button>
-                  {s.status !== 'live' && <button onClick={() => onSetStatus(s.id, 'live')} className="tb-btn-ghost text-xs text-success">Mark live</button>}
-                  {s.status !== 'ended' && <button onClick={() => setEndTarget(s.id)} className="tb-btn-ghost text-xs text-warning">End session</button>}
-                  <button onClick={() => setDeleteTarget(s.id)} className="tb-btn-ghost text-xs text-danger">Delete</button>
-                </div>
-              </div>
-            ))}
+          <div className="mt-4 tb-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-ink-100 dark:bg-ink-700/60"><tr><th className="px-4 py-2 text-left font-semibold">Title</th><th className="px-4 py-2 text-left font-semibold">Code</th><th className="px-4 py-2 text-left font-semibold">Status</th></tr></thead>
+              <tbody>{sessions.map((s) => (<tr key={s.id} className="border-t border-ink-200 dark:border-ink-700"><td className="px-4 py-2">{s.title}</td><td className="px-4 py-2 font-mono">{s.join_code}</td><td className="px-4 py-2"><SessionStatusBadge status={s.status} /></td></tr>))}</tbody>
+            </table>
           </div>
         ) : (
-          <div className="space-y-2">
-            {users.length === 0 && <div className="tb-card p-8 text-center text-sm text-ink-500">No users.</div>}
-            {users.map((u) => (
-              <div key={u.id} className="tb-card flex items-center gap-3 p-4">
-                <div className="grid h-9 w-9 place-items-center rounded-full bg-brand-500 text-xs font-bold text-white">{(u.name || '?').split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()}</div>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{u.name}</p><p className="truncate text-xs text-ink-500 dark:text-ink-300">@{u.username} · {u.email}</p></div>
-                <span className="tb-badge bg-brand-500/10 text-brand-600 dark:text-brand-300 capitalize">{u.role}</span>
-              </div>
-            ))}
+          <div className="mt-4 tb-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-ink-100 dark:bg-ink-700/60"><tr><th className="px-4 py-2 text-left font-semibold">Name</th><th className="px-4 py-2 text-left font-semibold">Username</th><th className="px-4 py-2 text-left font-semibold">Role</th></tr></thead>
+              <tbody>{users.map((u) => (<tr key={u.id} className="border-t border-ink-200 dark:border-ink-700"><td className="px-4 py-2 flex items-center gap-2"><Avatar name={u.name} size={24} /> {u.name}</td><td className="px-4 py-2">@{u.username}</td><td className="px-4 py-2 capitalize">{u.role}</td></tr>))}</tbody>
+            </table>
           </div>
         )}
       </main>
-
-      <ConfirmDialog open={!!endTarget} title="End this session?" description="The board becomes read-only for everyone. This cannot be undone." confirmLabel="End session" onConfirm={onEnd} onCancel={() => setEndTarget(null)} />
-      <ConfirmDialog open={!!deleteTarget} danger title="Delete this session permanently?" description="All board events and participant records will be removed. This cannot be undone." confirmLabel="Delete" onConfirm={onDelete} onCancel={() => setDeleteTarget(null)} />
     </div>
   );
 }

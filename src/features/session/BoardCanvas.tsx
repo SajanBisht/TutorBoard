@@ -12,9 +12,11 @@ interface BoardCanvasProps {
 }
 
 export function BoardCanvas({ items, tool, color, width, canDraw, onStrokeCommit, onTextCommit, onErase }: BoardCanvasProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [currentStroke, setCurrentStroke] = useState<{ id: string; points: { x: number; y: number }[] } | null>(null);
   const [textInput, setTextInput] = useState<{ id: string; x: number; y: number; value: string } | null>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
   const drawingRef = useRef(false);
 
   const toLocal = (e: ReactPointerEvent) => {
@@ -56,14 +58,22 @@ export function BoardCanvas({ items, tool, color, width, canDraw, onStrokeCommit
 
   const submitText = useCallback(() => {
     if (!textInput) return;
-    if (textInput.value.trim()) onTextCommit(textInput.id, textInput.value.trim(), textInput.x, textInput.y);
+    if (textInput.value.trim()) {
+      onTextCommit(textInput.id, textInput.value.trim(), textInput.x, textInput.y);
+    }
     setTextInput(null);
   }, [textInput, onTextCommit]);
 
   useEffect(() => {
+    if (textInput && textInputRef.current) {
+      textInputRef.current.focus();
+    }
+  }, [textInput]);
+
+  useEffect(() => {
     if (!textInput) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') submitText();
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitText(); }
       if (e.key === 'Escape') setTextInput(null);
     };
     window.addEventListener('keydown', handler);
@@ -73,28 +83,41 @@ export function BoardCanvas({ items, tool, color, width, canDraw, onStrokeCommit
   const cursor = !canDraw ? 'default' : tool === 'pen' ? 'crosshair' : tool === 'text' ? 'text' : 'cell';
 
   return (
-    <svg ref={svgRef} className="board-surface h-full w-full touch-none"
-      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
-      style={{ cursor, display: 'block' }}>
+    <div ref={containerRef} className="board-surface relative h-full w-full touch-none overflow-hidden" style={{ cursor }}>
+      <svg ref={svgRef} className="absolute inset-0 h-full w-full" style={{ display: 'block' }}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}>
+        {items.map((it) =>
+          it.type === 'stroke' && it.points && it.points.length > 0 ? (
+            <polyline key={it.id} points={it.points.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke={it.color || '#1A1A1A'} strokeWidth={it.width || 3} strokeLinecap="round" strokeLinejoin="round" />
+          ) : null
+        )}
+        {currentStroke && currentStroke.points.length > 0 && (
+          <polyline points={currentStroke.points.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke={color.value} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" opacity={0.95} />
+        )}
+      </svg>
+
       {items.map((it) =>
-        it.type === 'stroke' && it.points && it.points.length > 0 ? (
-          <polyline key={it.id} points={it.points.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke={it.color || '#1A1A1A'} strokeWidth={it.width || 3} strokeLinecap="round" strokeLinejoin="round" />
-        ) : it.type === 'text' ? (
-          <foreignObject key={it.id} x={it.x || 0} y={(it.y || 0) - (it.fontSize || 16)} width={400} height={80}>
-            <div style={{ fontSize: it.fontSize || 16, fontFamily: 'Inter, sans-serif', color: it.color || '#1A1A1A', lineHeight: 1.3, whiteSpace: 'pre-wrap', pointerEvents: 'none' }}>{it.content}</div>
-          </foreignObject>
+        it.type === 'text' ? (
+          <div key={it.id} className="pointer-events-none absolute select-none"
+            style={{ left: it.x || 0, top: (it.y || 0) - (it.fontSize || 16), fontSize: it.fontSize || 16, fontFamily: 'Inter, sans-serif', color: it.color || '#1A1A1A', lineHeight: 1.3, whiteSpace: 'pre-wrap' }}>
+            {it.content}
+          </div>
         ) : null
       )}
-      {currentStroke && currentStroke.points.length > 0 && (
-        <polyline points={currentStroke.points.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke={color.value} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" opacity={0.95} />
-      )}
+
       {textInput && (
-        <foreignObject x={textInput.x} y={textInput.y - 20} width={320} height={48}>
-          <input autoFocus value={textInput.value} onChange={(e) => setTextInput({ ...textInput, value: e.target.value })} onBlur={submitText} placeholder="Type and press Enter"
-            className="w-full rounded-md border border-brand-500 bg-white px-2 py-1 text-sm text-ink-800 outline-none shadow-soft dark:bg-ink-700 dark:text-ink-50" style={{ fontSize: 16 }} />
-        </foreignObject>
+        <textarea
+          ref={textInputRef}
+          value={textInput.value}
+          onChange={(e) => setTextInput({ ...textInput, value: e.target.value })}
+          onBlur={submitText}
+          placeholder="Type and press Enter…"
+          rows={1}
+          className="absolute z-10 rounded-md border-2 border-brand-500 bg-white px-2 py-1 text-ink-800 outline-none shadow-soft dark:bg-ink-700 dark:text-ink-50"
+          style={{ left: textInput.x, top: textInput.y - 20, fontSize: 16, fontFamily: 'Inter, sans-serif', minWidth: 120, resize: 'none' }}
+        />
       )}
-    </svg>
+    </div>
   );
 }
 

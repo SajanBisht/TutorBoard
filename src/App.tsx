@@ -1,45 +1,37 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './lib/auth';
+import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
 import { LobbyScreen } from './features/lobby/LobbyScreen';
 import { SessionScreen } from './features/session/SessionScreen';
-import { SettingsScreen } from './features/settings/SettingsScreen';
-import { AdminScreen } from './features/admin/AdminScreen';
 import { GroupsScreen } from './features/groups/GroupsScreen';
 import { GroupChatScreen } from './features/groups/GroupChatScreen';
+import { AdminScreen } from './features/admin/AdminScreen';
+import { SettingsScreen } from './features/settings/SettingsScreen';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="grid h-screen place-items-center bg-ink-50 dark:bg-ink-800"><div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" /></div>;
-  if (!user) return <Navigate to="/login" replace />;
-  return <>{children}</>;
-}
-
-function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="grid h-screen place-items-center bg-ink-50 dark:bg-ink-800"><div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" /></div>;
-  if (user) return <Navigate to="/lobby" replace />;
+  const { loading, session } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!session) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 export default function App() {
+  const { loading, session } = useAuth();
+  if (loading) return <LoadingScreen />;
+
   return (
     <Routes>
-      <Route path="/login" element={<PublicOnlyRoute><LoginScreen /></PublicOnlyRoute>} />
-      <Route path="/register" element={<PublicOnlyRoute><RegisterScreen /></PublicOnlyRoute>} />
+      <Route path="/login" element={session ? <Navigate to="/lobby" replace /> : <LoginScreen />} />
+      <Route path="/register" element={session ? <Navigate to="/lobby" replace /> : <RegisterScreen />} />
       <Route path="/lobby" element={<ProtectedRoute><LobbyScreen /></ProtectedRoute>} />
       <Route path="/session/:id" element={<ProtectedRoute><SessionScreen /></ProtectedRoute>} />
       <Route path="/groups" element={<ProtectedRoute><GroupsScreen /></ProtectedRoute>} />
       <Route path="/groups/:id" element={<ProtectedRoute><GroupChatScreen /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute><AdminScreen /></ProtectedRoute>} />
-      <Route path="/g/:slug" element={<GroupSlugRedirect />} />
-      <Route path="*" element={<Navigate to="/lobby" replace />} />
+      <Route path="*" element={<Navigate to={session ? '/lobby' : '/login'} replace />} />
     </Routes>
   );
-}
-
-function GroupSlugRedirect() {
-  return <Navigate to="/groups" replace />;
 }

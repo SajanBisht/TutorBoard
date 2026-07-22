@@ -1,149 +1,99 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
-import { ThemeToggle } from '../../components/ThemeToggle';
+import { useMySessions, createSession, joinSessionByCode, canCreateSession } from './sessionApi';
 import { Logo } from '../auth/LoginScreen';
+import { ThemeToggle } from '../../components/ThemeToggle';
 import { SessionStatusBadge } from '../../components/StatusBadge';
-import { canCreateSession, createSession, joinSessionByCode, useMySessions, SessionWithHost } from './sessionApi';
+import { Avatar } from '../../components/Avatar';
 
 export function LobbyScreen() {
-  const { profile, user, signOut } = useAuth();
   const navigate = useNavigate();
-  const { sessions, loading, error, reload } = useMySessions(user?.id);
-  const [newTitle, setNewTitle] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const { profile, signOut } = useAuth();
+  const { sessions, loading, refresh } = useMySessions();
   const [joinCode, setJoinCode] = useState('');
-  const [joining, setJoining] = useState(false);
-  const [joinError, setJoinError] = useState<string | null>(null);
-
+  const [newTitle, setNewTitle] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const canCreate = canCreateSession(profile);
 
-  const onCreate = async () => {
-    if (!user || !profile) return;
-    setCreating(true); setCreateError(null);
-    const title = newTitle.trim() || 'Untitled Session';
-    const { data, error } = await createSession(title, user.id, profile.role);
-    setCreating(false);
-    if (error || !data) { setCreateError(error || 'Failed to create session.'); return; }
+  const onCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
+    setBusy(true); setError(null);
+    const { session, error } = await createSession(newTitle.trim());
+    setBusy(false);
+    if (error) { setError(error); return; }
     setNewTitle('');
-    navigate(`/session/${data.id}`);
+    navigate(`/session/${session!.id}`);
   };
 
-  const onJoin = async () => {
-    if (!user || !profile) return;
-    setJoining(true); setJoinError(null);
-    const { data, error } = await joinSessionByCode(joinCode, user.id, profile.role);
-    setJoining(false);
-    if (error || !data) { setJoinError(error || 'Failed to join session.'); return; }
+  const onJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinCode.trim()) return;
+    setBusy(true); setError(null);
+    const { session, error } = await joinSessionByCode(joinCode.trim());
+    setBusy(false);
+    if (error) { setError(error); return; }
     setJoinCode('');
-    navigate(`/session/${data.id}`);
+    refresh();
+    navigate(`/session/${session!.id}`);
   };
 
   return (
     <div className="min-h-full bg-ink-50 dark:bg-ink-800">
-      <header className="sticky top-0 z-10 border-b border-ink-200 bg-ink-50/80 backdrop-blur dark:border-ink-700 dark:bg-ink-800/80">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-3">
-            <Logo />
-            {profile && <span className="tb-badge bg-brand-500/10 capitalize text-brand-600 dark:text-brand-300">{profile.role}</span>}
-          </div>
+      <header className="sticky top-0 z-20 border-b border-ink-200 bg-white/80 backdrop-blur-md dark:border-ink-700 dark:bg-ink-700/60">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+          <Logo />
           <div className="flex items-center gap-2">
-            <button onClick={() => navigate('/groups')} className="tb-btn-ghost">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-              Groups
-            </button>
+            <button onClick={() => navigate('/groups')} className="tb-btn-ghost">Groups</button>
             {profile?.role === 'admin' && <button onClick={() => navigate('/admin')} className="tb-btn-ghost">Admin</button>}
-            <button onClick={() => navigate('/settings')} className="tb-btn-ghost">Settings</button>
+            <button onClick={() => navigate('/settings')} className="tb-btn-ghost" aria-label="Settings"><Avatar name={profile?.name || 'User'} size={28} /></button>
             <ThemeToggle />
-            <button onClick={signOut} className="tb-btn-secondary">Log out</button>
+            <button onClick={signOut} className="tb-btn-secondary text-xs">Sign out</button>
           </div>
         </div>
       </header>
-
       <main className="mx-auto max-w-5xl px-4 py-6">
-        <div className="mb-6">
-          <h1 className="font-display text-2xl font-bold">Sessions</h1>
-          <p className="text-sm text-ink-500 dark:text-ink-300">Create a whiteboard session and share the join code with your students.</p>
-        </div>
-
-        <div className="mb-6 grid gap-4 md:grid-cols-2">
-          {canCreate && (
-            <div className="tb-card p-5">
-              <h2 className="mb-3 font-display text-base font-semibold">Create a session</h2>
-              <div className="flex gap-2">
-                <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="tb-input" placeholder="Session title" onKeyDown={(e) => e.key === 'Enter' && onCreate()} />
-                <button onClick={onCreate} disabled={creating} className="tb-btn-primary shrink-0">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-                  {creating ? 'Creating…' : 'Create'}
-                </button>
-              </div>
-              {createError && <p className="mt-2 text-xs text-danger">{createError}</p>}
-            </div>
-          )}
-
+        <h1 className="font-display text-2xl font-bold">Sessions</h1>
+        <p className="mt-1 text-sm text-ink-500 dark:text-ink-300">Create a new session or join one with a code.</p>
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="tb-card p-5">
-            <h2 className="mb-3 font-display text-base font-semibold">Join a session</h2>
-            <div className="flex gap-2">
-              <input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} maxLength={6} className="tb-input font-mono tracking-[0.2em]" placeholder="ABC123" onKeyDown={(e) => e.key === 'Enter' && onJoin()} />
-              <button onClick={onJoin} disabled={joining || joinCode.length !== 6} className="tb-btn-secondary shrink-0">
-                {joining ? 'Joining…' : 'Join'}
-              </button>
-            </div>
-            {joinError && <p className="mt-2 text-xs text-danger">{joinError}</p>}
+            <h2 className="font-display text-base font-semibold">Create a session</h2>
+            {canCreate ? (
+              <form onSubmit={onCreate} className="mt-3 space-y-3">
+                <input className="tb-input" placeholder="Session title" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+                <button type="submit" disabled={busy} className="tb-btn-primary w-full">Create & start</button>
+              </form>
+            ) : <p className="mt-2 text-sm text-ink-400">Only teachers and admins can create sessions.</p>}
+          </div>
+          <div className="tb-card p-5">
+            <h2 className="font-display text-base font-semibold">Join a session</h2>
+            <form onSubmit={onJoin} className="mt-3 space-y-3">
+              <input className="tb-input font-mono" placeholder="Enter join code" value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} maxLength={8} />
+              <button type="submit" disabled={busy} className="tb-btn-secondary w-full">Join</button>
+            </form>
           </div>
         </div>
-
-        <section>
-          <h2 className="mb-3 font-display text-lg font-semibold">Your sessions</h2>
-          {loading ? (
-            <div className="space-y-2">{[0, 1, 2].map((i) => <div key={i} className="tb-card h-16 animate-pulse bg-ink-100 dark:bg-ink-700/40" />)}</div>
-          ) : error ? (
-            <div className="tb-card flex items-center justify-between p-4">
-              <p className="text-sm text-danger">Couldn't load sessions: {error}</p>
-              <button onClick={reload} className="tb-btn-secondary">Retry</button>
-            </div>
-          ) : sessions.length === 0 ? (
-            <div className="tb-card p-8 text-center text-sm text-ink-500 dark:text-ink-300">
-              {canCreate ? 'No sessions yet. Create one above to get started.' : 'No sessions yet. Join one with a code above.'}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {sessions.map((s) => (
-                <SessionCard key={s.id} session={s} onOpen={() => navigate(`/session/${s.id}`)} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="mt-8">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-lg font-semibold">Group chats</h2>
-            <button onClick={() => navigate('/groups')} className="tb-btn-ghost text-xs">Browse all</button>
+        {error && <div className="mt-4 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+        <h2 className="mt-8 font-display text-lg font-semibold">Your sessions</h2>
+        {loading ? (
+          <div className="mt-4 flex items-center gap-2 text-sm text-ink-500"><div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" /> Loading…</div>
+        ) : sessions.length === 0 ? (
+          <div className="mt-4 tb-card p-8 text-center text-sm text-ink-400">No sessions yet. Create or join one above.</div>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {sessions.map((s) => (
+              <button key={s.id} onClick={() => navigate(`/session/${s.id}`)} className="tb-card p-4 text-left transition hover:shadow-float">
+                <div className="flex items-start justify-between">
+                  <div><p className="font-semibold">{s.title}</p><p className="mt-0.5 text-xs text-ink-500">Code: <span className="font-mono font-semibold">{s.join_code}</span></p></div>
+                  <SessionStatusBadge status={s.status} />
+                </div>
+              </button>
+            ))}
           </div>
-          <button onClick={() => navigate('/groups')} className="tb-card mt-3 flex w-full items-center gap-3 p-4 text-left transition hover:border-brand-400">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand-500/10 text-brand-500">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-            </div>
-            <div>
-              <p className="text-sm font-semibold">Create or join a group</p>
-              <p className="text-xs text-ink-500 dark:text-ink-300">Chat, share files, images, and videos with your groups.</p>
-            </div>
-          </button>
-        </section>
+        )}
       </main>
     </div>
-  );
-}
-
-function SessionCard({ session, onOpen }: { session: SessionWithHost; onOpen: () => void }) {
-  return (
-    <button onClick={onOpen} className="tb-card flex w-full items-center justify-between gap-3 p-4 text-left transition hover:border-brand-400 hover:shadow-float">
-      <div className="min-w-0">
-        <p className="truncate font-semibold">{session.title}</p>
-        <p className="mt-1 text-xs text-ink-500 dark:text-ink-300">Code <span className="font-mono font-semibold">{session.join_code}</span> · {session.participantCount || 0} participants</p>
-      </div>
-      <SessionStatusBadge status={session.status} />
-    </button>
   );
 }

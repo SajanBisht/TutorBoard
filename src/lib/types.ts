@@ -1,10 +1,10 @@
 export type Role = 'admin' | 'teacher' | 'student';
 export type SessionStatus = 'scheduled' | 'live' | 'ended';
 export type RoleInSession = 'admin' | 'teacher' | 'student';
-export type PresenceStatus = 'joined' | 'left' | 'drawing' | 'idle';
 export type BoardEventType = 'stroke' | 'text' | 'erase' | 'permission' | 'presence' | 'clear';
 export type MessageType = 'text' | 'image' | 'file' | 'video' | 'sticker';
 export type GroupMemberRole = 'owner' | 'admin' | 'member';
+export type SessionPanel = 'video' | 'board' | 'file' | 'screenshare';
 
 export interface Profile {
   id: string;

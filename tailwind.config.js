@@ -35,14 +35,12 @@ export default {
       keyframes: {
         slideDown: { '0%': { opacity: '0', transform: 'translateY(-8px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
         slideUp: { '0%': { opacity: '0', transform: 'translateY(8px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
-        slideRight: { '0%': { opacity: '0', transform: 'translateX(-8px)' }, '100%': { opacity: '1', transform: 'translateX(0)' } },
         pulseDot: { '0%,100%': { opacity: '1' }, '50%': { opacity: '0.4' } },
         popIn: { '0%': { opacity: '0', transform: 'scale(0.8)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
       },
       animation: {
         slideDown: 'slideDown 0.2s ease-out',
         slideUp: 'slideUp 0.2s ease-out',
-        slideRight: 'slideRight 0.2s ease-out',
         pulseDot: 'pulseDot 1.4s ease-in-out infinite',
         popIn: 'popIn 0.15s ease-out',
       },
